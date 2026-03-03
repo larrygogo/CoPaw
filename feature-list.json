@@ -1,0 +1,18 @@
+{
+  "project": "CoPaw",
+  "description": "个人 AI 助手 - Fork 自定义版本",
+  "version": "0.1.0",
+  "tech_stack": {
+    "backend": "Python/agentscope",
+    "frontend": "TypeScript/Vite/React",
+    "database": "",
+    "ai": "多模型支持（agentscope 框架）"
+  },
+  "stats": {
+    "total": 0,
+    "completed": 0,
+    "in_progress": 0,
+    "pending": 0
+  },
+  "features": []
+}
