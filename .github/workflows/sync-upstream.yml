@@ -1,0 +1,86 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    # 每天 UTC 0:00（北京时间 8:00）自动运行
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/agentscope-ai/CoPaw.git
+
+      - name: Fetch upstream
+        run: git fetch upstream main
+
+      - name: Check for updates
+        id: check
+        run: |
+          BEHIND=$(git rev-list --count HEAD..upstream/main)
+          echo "behind=$BEHIND" >> "$GITHUB_OUTPUT"
+          if [ "$BEHIND" -eq 0 ]; then
+            echo "Already up to date with upstream."
+          else
+            echo "Fork is $BEHIND commit(s) behind upstream."
+          fi
+
+      - name: Merge upstream
+        if: steps.check.outputs.behind != '0'
+        id: merge
+        run: |
+          if git merge upstream/main --no-edit; then
+            echo "result=success" >> "$GITHUB_OUTPUT"
+          else
+            git merge --abort
+            echo "result=conflict" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push changes
+        if: steps.merge.outputs.result == 'success'
+        run: git push origin main
+
+      - name: Create PR on conflict
+        if: steps.merge.outputs.result == 'conflict'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="sync-upstream/$(date +%Y%m%d)"
+          git checkout -b "$BRANCH"
+          git merge upstream/main --no-edit || true
+          git add -A
+          git commit -m "chore: sync upstream (conflicts need manual resolution)" || true
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "chore: 同步上游仓库（存在合并冲突）" \
+            --body "$(cat <<'EOF'
+          ## 说明
+
+          自动同步上游仓库 `agentscope-ai/CoPaw` 时检测到合并冲突，需要手动解决。
+
+          ## 操作步骤
+
+          1. 拉取此分支到本地
+          2. 解决冲突文件
+          3. 提交并合并此 PR
+          EOF
+          )" \
+            --base main \
+            --head "$BRANCH"
